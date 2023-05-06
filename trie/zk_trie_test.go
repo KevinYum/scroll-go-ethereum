@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"runtime"
 	"sync"
@@ -172,7 +173,7 @@ func tempDBZK(b *testing.B) (string, *Database) {
 
 const benchElemCountZk = 10000
 
-func BenchmarkZkTrieGet(b *testing.B) {
+func BenchmarkTrieGet(b *testing.B) {
 	_, tmpdb := tempDBZK(b)
 	zkTrie, _ := NewZkTrie(common.Hash{}, NewZktrieDatabaseFromTriedb(tmpdb))
 	defer func() {
@@ -181,25 +182,26 @@ func BenchmarkZkTrieGet(b *testing.B) {
 		os.RemoveAll(ldb.Path())
 	}()
 
-	k := make([]byte, 32)
+	var keys [][]byte
 	for i := 0; i < benchElemCountZk; i++ {
-		binary.LittleEndian.PutUint64(k, uint64(i))
+		key := make([]byte, 32)
+		binary.LittleEndian.PutUint64(key, uint64(i))
 
-		err := zkTrie.TryUpdate(k, k)
+		err := zkTrie.TryUpdate(key, key)
+		keys = append(keys, key)
 		assert.NoError(b, err)
 	}
 
 	zkTrie.db.db.Commit(common.Hash{}, true, nil)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		binary.LittleEndian.PutUint64(k, uint64(i))
-		_, err := zkTrie.TryGet(k)
+		_, err := zkTrie.TryGet(keys[rand.Intn(len(keys))])
 		assert.NoError(b, err)
 	}
 	b.StopTimer()
 }
 
-func BenchmarkZkTrieUpdate(b *testing.B) {
+func BenchmarkTrieUpdateExisting(b *testing.B) {
 	_, tmpdb := tempDBZK(b)
 	zkTrie, _ := NewZkTrie(common.Hash{}, NewZktrieDatabaseFromTriedb(tmpdb))
 	defer func() {
@@ -208,24 +210,23 @@ func BenchmarkZkTrieUpdate(b *testing.B) {
 		os.RemoveAll(ldb.Path())
 	}()
 
-	k := make([]byte, 32)
-	v := make([]byte, 32)
 	b.ReportAllocs()
 
+	var keys [][]byte
 	for i := 0; i < benchElemCountZk; i++ {
-		binary.LittleEndian.PutUint64(k, uint64(i))
-		err := zkTrie.TryUpdate(k, k)
+		key := make([]byte, 32)
+		binary.LittleEndian.PutUint64(key, uint64(i))
+
+		err := zkTrie.TryUpdate(key, key)
+		keys = append(keys, key)
 		assert.NoError(b, err)
 	}
-	binary.LittleEndian.PutUint64(k, benchElemCountZk/2)
 
 	//zkTrie.Commit(nil)
 	zkTrie.db.db.Commit(common.Hash{}, true, nil)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		binary.LittleEndian.PutUint64(k, uint64(i))
-		binary.LittleEndian.PutUint64(v, 0xffffffff+uint64(i))
-		err := zkTrie.TryUpdate(k, v)
+		err := zkTrie.TryUpdate(keys[rand.Intn(len(keys))], keys[rand.Intn(len(keys))])
 		assert.NoError(b, err)
 	}
 	b.StopTimer()

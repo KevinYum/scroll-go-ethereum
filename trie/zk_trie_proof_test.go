@@ -232,5 +232,22 @@ func TestProofWithDeletion(t *testing.T) {
 	sibling2, err := tr.ProveWithDeletion(s_key2.Bytes(), 0, proof)
 	assert.NoError(t, err)
 	assert.Nil(t, sibling2)
+}
 
+func BenchmarkProveSecureTrie(b *testing.B) {
+	t := new(testing.T)
+	trie, vals := randomZktrie(t, 4096)
+	var keys []string
+	for k := range vals {
+		keys = append(keys, k)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		kv := vals[keys[i%len(keys)]]
+		proofs := memorydb.New()
+		if err := trie.Prove(kv.k, 0, proofs); err != nil || proofs.Len() == 0 {
+			b.Fatalf("zero length proof for %x", kv.k)
+		}
+	}
 }
